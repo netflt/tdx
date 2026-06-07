@@ -739,7 +739,9 @@ func (this *Client) GetTradeAll(code string) (*protocol.TradeResp, error) {
 	return this.GetMinuteTradeAll(code)
 }
 
-// GetMinuteTradeAll 获取分时全部交易详情,todo 只做参考 因为交易实时在进行,然后又是分页读取的,所以会出现读取间隔内产生的交易会丢失
+// GetMinuteTradeAll 获取分时全部交易详情。
+// 服务器单次最多返回1800条且为倒序(最新在前)，本方法自动分页获取全量并按时间正序排列。
+// 注意: 盘中实时场景下，分页读取间隔内新产生的成交可能丢失。
 func (this *Client) GetMinuteTradeAll(code string) (*protocol.TradeResp, error) {
 	resp := &protocol.TradeResp{}
 	size := uint16(1800)
@@ -749,12 +751,14 @@ func (this *Client) GetMinuteTradeAll(code string) (*protocol.TradeResp, error) 
 			return nil, err
 		}
 		resp.Count += r.Count
-		resp.List = append(r.List, resp.List...)
+		resp.List = append(resp.List, r.List...)
 
 		if r.Count < size {
 			break
 		}
 	}
+	// 服务器返回倒序(最新在前)，按时间正序排列
+	resp.List.Sort()
 	return resp, nil
 }
 
@@ -821,6 +825,7 @@ func (this *Client) GetHistoryTradeDay(date, code string) (*protocol.TradeResp, 
 
 // GetHistoryMinuteTradeDay 获取历史某天分时全部交易,通过多次请求来拼接,只能获取昨天及之前的数据
 // 历史数据只能查到20000609
+// 服务器单次最多返回2000条且为倒序(最新在前)，本方法自动分页获取全量并按时间正序排列。
 func (this *Client) GetHistoryMinuteTradeDay(date, code string) (*protocol.TradeResp, error) {
 	resp := &protocol.TradeResp{}
 	size := uint16(2000)
@@ -830,11 +835,13 @@ func (this *Client) GetHistoryMinuteTradeDay(date, code string) (*protocol.Trade
 			return nil, err
 		}
 		resp.Count += r.Count
-		resp.List = append(r.List, resp.List...)
+		resp.List = append(resp.List, r.List...)
 		if r.Count < size {
 			break
 		}
 	}
+	// 服务器返回倒序(最新在前)，按时间正序排列
+	resp.List.Sort()
 	return resp, nil
 }
 

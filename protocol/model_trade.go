@@ -3,6 +3,7 @@ package protocol
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/injoyai/base/types"
@@ -117,6 +118,13 @@ func (trade) Decode(bs []byte, c TradeCache) (*TradeResp, error) {
 }
 
 type Trades []*Trade
+
+// Sort 按时间正序排列
+func (this Trades) Sort() {
+	sort.Slice(this, func(i, j int) bool {
+		return this[i].Time.Before(this[j].Time)
+	})
+}
 
 // Volume2 内(主动卖)外(主动买)盘成交量,不准确,能用
 func (this Trades) Volume2() (sell int64, buy int64) {

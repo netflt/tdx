@@ -1,0 +1,82 @@
+version: "3.8"
+
+services:
+  # MySQL 服务 (合并自 db.yml, 复用已有配置)
+  mysql-server:
+    image: mysql:8.0
+    container_name: ${MYSQL_CONTAINER:-vnpy-mysql-prod}
+    restart: always
+    ports:
+      - "${MYSQL_HOST_PORT:-3307}:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-YourStrongPassword123!}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-vnpy_db}
+      MYSQL_USER: ${MYSQL_USER:-vnpy}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-Ecallcen}
+      TZ: Asia/Shanghai
+    volumes:
+      - ./config/my.cnf:/etc/mysql/conf.d/my.cnf:ro
+      - mysql-data:/var/lib/mysql
+      - mysql-logs:/var/log/mysql
+    networks:
+      - mysql-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-YourStrongPassword123!}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # TDX API 服务
+  tdx-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: tdx-api:latest
+    container_name: tdx-api
+    restart: unless-stopped
+    depends_on:
+      mysql-server:
+        condition: service_healthy
+    ports:
+      - "${TDX_PORT:-8080}:8080"
+    volumes:
+      - tdx-data:/app/data
+    environment:
+      TZ: Asia/Shanghai
+      DB_TYPE: ${DB_TYPE:-mysql}
+      DB_HOST: mysql-server
+      DB_PORT: 3306
+      DB_USER: ${DB_USER:-vnpy}
+      DB_PASSWORD: ${DB_PASSWORD:-Ecallcen}
+      DB_NAME: ${DB_NAME:-vnpy_db}
+    networks:
+      - mysql-network
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/api/server-status"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  mysql-data:
+    driver: local
+  mysql-logs:
+    driver: local
+  tdx-data:
+    driver: local
+
+networks:
+  mysql-network:
+    driver: bridge

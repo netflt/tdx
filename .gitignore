@@ -1,2 +1,7 @@
 /dump/
 /data/
+tdx-server
+tdx-server-*
+tdx-server.pid
+tdx-server.log
+.env
