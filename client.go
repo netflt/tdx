@@ -92,6 +92,9 @@ func DialWith(dial ios.DialFunc, op ...client.Option) (cli *Client, err error) {
 		c.SetOption(op...)                             //自定义选项
 		c.Event.OnReadFrom = protocol.ReadFrom         //分包
 		c.Event.OnDealMessage = cli.handlerDealMessage //解析数据并处理
+		c.Event.OnDisconnect = func(c *client.Client, err error) {
+			logs.Warnf("TDX连接断开: %s", err.Error())
+		}
 		c.Event.OnConnected = func(c *client.Client) error {
 			//无数据超时时间是60秒,30秒发送一个心跳包
 			c.GoTimerWriter(30*time.Second, func(w ios.MoreWriter) error {

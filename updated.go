@@ -23,8 +23,13 @@ func NewTimer(spec string, retry int, up Updater) error {
 	_, err = cr.AddFunc(spec, func() {
 		for i := 0; i == 0 || i < retry; i++ {
 			if err := up.Update(); err != nil {
-				logs.Err(err)
-				<-time.After(time.Minute * 5)
+				if isConnErr(err) {
+					logs.Warnf("更新失败(连接错误): %s, 10秒后重试...", err)
+					<-time.After(time.Second * 10)
+				} else {
+					logs.Err(err)
+					<-time.After(time.Minute * 5)
+				}
 			} else {
 				break
 			}

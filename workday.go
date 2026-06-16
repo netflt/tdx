@@ -1,7 +1,6 @@
 package tdx
 
 import (
-	"errors"
 	"iter"
 	"path/filepath"
 	"time"
@@ -138,8 +137,8 @@ type Workday struct {
 // Update 更新
 func (this *Workday) Update() error {
 
-	if this.c == nil {
-		return errors.New("client is nil")
+	if err := ensureClient(&this.c, this.dialClient); err != nil {
+		return err
 	}
 
 	//获取沪市指数的日K线,用作历史是否节假日的判断依据

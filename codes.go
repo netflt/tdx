@@ -1,7 +1,6 @@
 package tdx
 
 import (
-	"errors"
 	"iter"
 	"math"
 	"path/filepath"
@@ -173,8 +172,8 @@ func (this *Codes) Update() error {
 // GetCodes 更新股票并返回结果
 func (this *Codes) update() ([]*CodeModel, error) {
 
-	if this.c == nil {
-		return nil, errors.New("client is nil")
+	if err := ensureClient(&this.c, this.dialClient); err != nil {
+		return nil, err
 	}
 
 	//2. 查询数据库所有股票

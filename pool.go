@@ -2,8 +2,10 @@ package tdx
 
 import (
 	"errors"
+	"time"
 
 	"github.com/injoyai/base/safe"
+	"github.com/injoyai/logs"
 )
 
 type (
@@ -23,7 +25,8 @@ func NewPool(dial func() (*Client, error), number int) (*Pool, error) {
 	}
 	ch := make(chan *Client, number)
 	p := &Pool{
-		ch: ch,
+		ch:   ch,
+		dial: dial,
 		Closer: safe.NewCloser().SetCloseFunc(func(err error) error {
 			close(ch)
 			return nil
@@ -40,19 +43,51 @@ func NewPool(dial func() (*Client, error), number int) (*Pool, error) {
 }
 
 type Pool struct {
-	ch chan *Client
+	ch   chan *Client
+	dial func() (*Client, error) // 连接创建函数，用于重建失效连接
 	*safe.Closer
 }
 
 func (this *Pool) Get() (*Client, error) {
-	select {
-	case <-this.Done():
-		return nil, this.Err()
-	case c, ok := <-this.ch:
-		if !ok {
-			return nil, errors.New("已关闭")
+	for {
+		select {
+		case <-this.Done():
+			return nil, this.Err()
+		case c, ok := <-this.ch:
+			if !ok {
+				return nil, errors.New("已关闭")
+			}
+			// 健康检查：全局生命周期结束，需重建
+			if c.Done() != nil {
+				select {
+				case <-c.Done():
+					logs.Warnf("连接池发现已关闭连接，正在重建...")
+					if this.dial != nil {
+						if newClient, err := this.dial(); err == nil {
+							return newClient, nil
+						}
+					}
+					continue
+				default:
+				}
+			}
+			// 健康检查：单次连接断开，等待重连或重建
+			if c.Closed() {
+				select {
+				case <-c.Dialed():
+					return c, nil
+				case <-time.After(5 * time.Second):
+					logs.Warnf("连接池发现断开连接，正在重建...")
+					if this.dial != nil {
+						if newClient, err := this.dial(); err == nil {
+							return newClient, nil
+						}
+					}
+					continue
+				}
+			}
+			return c, nil
 		}
-		return c, nil
 	}
 }
 
@@ -61,7 +96,25 @@ func (this *Pool) Put(c *Client) {
 	case <-this.Done():
 		c.Close()
 		return
+	default:
+	}
+	// 状态验证：已关闭的连接不放回池中
+	if c.Done() != nil {
+		select {
+		case <-c.Done():
+			logs.Warnf("连接池丢弃已断开连接")
+			return
+		default:
+		}
+	}
+	if c.Closed() {
+		logs.Warnf("连接池丢弃已断开连接")
+		return
+	}
+	select {
 	case this.ch <- c:
+	default:
+		c.Close()
 	}
 }
 

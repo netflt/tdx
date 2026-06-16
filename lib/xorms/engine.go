@@ -13,7 +13,15 @@ import (
 )
 
 func NewMysql(dsn string, options ...Option) (*Engine, error) {
-	return New("mysql", dsn, options...)
+	// MySQL 默认连接池参数
+	defaultOptions := []Option{
+		WithConnMaxLifetime(5 * time.Minute),
+		WithMaxIdleConns(2),
+		WithMaxOpenConns(10),
+	}
+	// 用户 Option 可覆盖默认值（后设置的 Option 覆盖先设置的）
+	allOptions := append(defaultOptions, options...)
+	return New("mysql", dsn, allOptions...)
 }
 
 func NewSqlite(filename string, options ...Option) (*Engine, error) {

@@ -229,6 +229,10 @@ func (this *Gbbq) GetTurnover(code string, t time.Time, volume int64) float64 {
 }
 
 func (this *Gbbq) Update() error {
+	if err := ensureClient(&this.c, this.dialClient); err != nil {
+		return err
+	}
+
 	old, err := this.loading()
 	if err != nil {
 		return err
