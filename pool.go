@@ -57,19 +57,27 @@ func (this *Pool) Get() (*Client, error) {
 			if !ok {
 				return nil, errors.New("已关闭")
 			}
-			// 健康检查：全局生命周期结束，需重建
-			if c.Done() != nil {
-				select {
-				case <-c.Done():
-					logs.Warnf("连接池发现已关闭连接，正在重建...")
-					if this.dial != nil {
-						if newClient, err := this.dial(); err == nil {
-							return newClient, nil
-						}
+			// 健康检查：内部 client.Client 为 nil，需重建
+			if c.Client == nil {
+				logs.Warnf("连接池发现无效连接，正在重建...")
+				if this.dial != nil {
+					if newClient, err := this.dial(); err == nil {
+						return newClient, nil
 					}
-					continue
-				default:
 				}
+				continue
+			}
+			// 健康检查：全局生命周期结束，需重建
+			select {
+			case <-c.Done():
+				logs.Warnf("连接池发现已关闭连接，正在重建...")
+				if this.dial != nil {
+					if newClient, err := this.dial(); err == nil {
+						return newClient, nil
+					}
+				}
+				continue
+			default:
 			}
 			// 健康检查：单次连接断开，等待重连或重建
 			if c.Closed() {
@@ -98,14 +106,16 @@ func (this *Pool) Put(c *Client) {
 		return
 	default:
 	}
-	// 状态验证：已关闭的连接不放回池中
-	if c.Done() != nil {
-		select {
-		case <-c.Done():
-			logs.Warnf("连接池丢弃已断开连接")
-			return
-		default:
-		}
+	// 状态验证：内部 client.Client 为 nil 或已关闭的连接不放回池中
+	if c.Client == nil {
+		logs.Warnf("连接池丢弃无效连接")
+		return
+	}
+	select {
+	case <-c.Done():
+		logs.Warnf("连接池丢弃已断开连接")
+		return
+	default:
 	}
 	if c.Closed() {
 		logs.Warnf("连接池丢弃已断开连接")

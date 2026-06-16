@@ -36,7 +36,7 @@ func isConnErr(err error) bool {
 // 参数 c 为 Client 指针的指针，重建时会替换为新实例
 // 参数 dial 为连接创建函数
 func ensureClient(c **Client, dial DialClientFunc) error {
-	if *c == nil {
+	if *c == nil || (*c).Client == nil {
 		newClient, err := dial()
 		if err != nil {
 			return err
@@ -45,19 +45,17 @@ func ensureClient(c **Client, dial DialClientFunc) error {
 		return nil
 	}
 
-	if (*c).Done() != nil {
-		select {
-		case <-(*c).Done():
-			// 全局生命周期结束，需重建
-			logs.Warnf("客户端连接已关闭，正在重建...")
-			newClient, err := dial()
-			if err != nil {
-				return err
-			}
-			*c = newClient
-			return nil
-		default:
+	select {
+	case <-(*c).Done():
+		// 全局生命周期结束，需重建
+		logs.Warnf("客户端连接已关闭，正在重建...")
+		newClient, err := dial()
+		if err != nil {
+			return err
 		}
+		*c = newClient
+		return nil
+	default:
 	}
 
 	if (*c).Closed() {
