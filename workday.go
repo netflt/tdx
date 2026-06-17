@@ -115,6 +115,8 @@ func NewWorkday(op ...WorkdayOption) (*Workday, error) {
 		if err != nil {
 			return nil, err
 		}
+	} else if w.dialClient == nil {
+		w.dialClient = func() (*Client, error) { return DialDefault() }
 	}
 
 	//设置定时器,每天早上9点更新数据,8点多获取不到今天的数据

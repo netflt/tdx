@@ -37,6 +37,9 @@ func isConnErr(err error) bool {
 // 参数 dial 为连接创建函数
 func ensureClient(c **Client, dial DialClientFunc) error {
 	if *c == nil || (*c).Client == nil {
+		if dial == nil {
+			return errors.New("dialClient is nil, cannot create new connection")
+		}
 		newClient, err := dial()
 		if err != nil {
 			return err
@@ -49,6 +52,9 @@ func ensureClient(c **Client, dial DialClientFunc) error {
 	case <-(*c).Done():
 		// 全局生命周期结束，需重建
 		logs.Warnf("客户端连接已关闭，正在重建...")
+		if dial == nil {
+			return errors.New("dialClient is nil, cannot rebuild connection")
+		}
 		newClient, err := dial()
 		if err != nil {
 			return err
@@ -67,6 +73,9 @@ func ensureClient(c **Client, dial DialClientFunc) error {
 		case <-time.After(30 * time.Second):
 			// 重连超时，手动重建
 			logs.Warnf("客户端自动重连超时，正在手动重建...")
+			if dial == nil {
+				return errors.New("dialClient is nil, cannot rebuild connection")
+			}
 			newClient, err := dial()
 			if err != nil {
 				return err

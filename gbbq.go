@@ -92,6 +92,8 @@ func NewGbbq(op ...GbbqOption) (*Gbbq, error) {
 		if err != nil {
 			return nil, err
 		}
+	} else if s.dialClient == nil {
+		s.dialClient = func() (*Client, error) { return DialDefault() }
 	}
 
 	// 初始化数据库

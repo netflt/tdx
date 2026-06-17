@@ -113,6 +113,8 @@ func NewCodes(op ...CodesOption) (*Codes, error) {
 		if err != nil {
 			return nil, err
 		}
+	} else if cs.dialClient == nil {
+		cs.dialClient = func() (*Client, error) { return DialDefault() }
 	}
 
 	// 初始化数据库
