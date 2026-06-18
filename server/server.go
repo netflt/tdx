@@ -48,9 +48,9 @@ type Config struct {
 func Run(cfg Config) error {
 	startAt = time.Now()
 
-	// 1. 连接通达信服务器
+	// 1. 连接通达信服务器（启用断线重连）
 	var err error
-	client, err = tdx.DialWith(tdx.NewHostDial(tdx.Hosts))
+	client, err = tdx.DialDefault()
 	if err != nil {
 		return fmt.Errorf("连接通达信服务器失败: %w", err)
 	}
@@ -292,7 +292,12 @@ func handleQuote(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	codes := queryCodes(r, "code")
-	resp, err := client.GetQuote(codes...)
+	var resp any
+	err := retryOnConnErr(func() error {
+		var e error
+		resp, e = client.GetQuote(codes...)
+		return e
+	})
 	if err != nil {
 		writeJSON(w, Failf("获取行情失败: %v", err))
 		return
@@ -310,7 +315,12 @@ func handleBatchQuote(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, Fail("股票代码列表不能为空"))
 		return
 	}
-	resp, err := client.GetQuote(req.Codes...)
+	var resp any
+	err := retryOnConnErr(func() error {
+		var e error
+		resp, e = client.GetQuote(req.Codes...)
+		return e
+	})
 	if err != nil {
 		writeJSON(w, Failf("获取行情失败: %v", err))
 		return
@@ -358,7 +368,12 @@ func handleKline(w http.ResponseWriter, r *http.Request) {
 	typeStr := queryStr(r, "type", "day")
 	count := uint16(queryInt(r, "count", 100))
 
-	resp, err := client.GetKline(klineType(typeStr), code, 0, count)
+	var resp any
+	err := retryOnConnErr(func() error {
+		var e error
+		resp, e = client.GetKline(klineType(typeStr), code, 0, count)
+		return e
+	})
 	if err != nil {
 		writeJSON(w, Failf("获取K线失败: %v", err))
 		return
@@ -375,13 +390,18 @@ func handleKlineAll(w http.ResponseWriter, r *http.Request) {
 	typeStr := queryStr(r, "type", "day")
 	limit := queryInt(r, "limit", 0)
 
-	resp, err := client.GetKlineAll(klineType(typeStr), code)
+	var klineResp *protocol.KlineResp
+	err := retryOnConnErr(func() error {
+		var e error
+		klineResp, e = client.GetKlineAll(klineType(typeStr), code)
+		return e
+	})
 	if err != nil {
 		writeJSON(w, Failf("获取K线失败: %v", err))
 		return
 	}
 
-	list := resp.List
+	list := klineResp.List
 	if limit > 0 && limit < len(list) {
 		list = list[len(list)-limit:]
 	}
@@ -400,13 +420,18 @@ func handleKlineAllTDX(w http.ResponseWriter, r *http.Request) {
 	typeStr := queryStr(r, "type", "day")
 	limit := queryInt(r, "limit", 0)
 
-	resp, err := client.GetKlineAll(klineType(typeStr), code)
+	var klineResp *protocol.KlineResp
+	err := retryOnConnErr(func() error {
+		var e error
+		klineResp, e = client.GetKlineAll(klineType(typeStr), code)
+		return e
+	})
 	if err != nil {
 		writeJSON(w, Failf("获取K线失败: %v", err))
 		return
 	}
 
-	list := resp.List
+	list := klineResp.List
 	if limit > 0 && limit < len(list) {
 		list = list[len(list)-limit:]
 	}
@@ -473,7 +498,12 @@ func handleKlineHistory(w http.ResponseWriter, r *http.Request) {
 		limit = 800
 	}
 
-	resp, err := client.GetKline(klineType(typeStr), code, 0, limit)
+	var klineResp *protocol.KlineResp
+	err := retryOnConnErr(func() error {
+		var e error
+		klineResp, e = client.GetKline(klineType(typeStr), code, 0, limit)
+		return e
+	})
 	if err != nil {
 		writeJSON(w, Failf("获取K线失败: %v", err))
 		return
@@ -482,7 +512,7 @@ func handleKlineHistory(w http.ResponseWriter, r *http.Request) {
 	startDate := queryStr(r, "start_date")
 	endDate := queryStr(r, "end_date")
 
-	list := resp.List
+	list := klineResp.List
 	if startDate != "" || endDate != "" {
 		filtered := make(protocol.Klines, 0, len(list))
 		for _, k := range list {
@@ -517,7 +547,12 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 	typeStr := queryStr(r, "type", "day")
 	count := uint16(queryInt(r, "count", 100))
 
-	resp, err := client.GetIndex(klineType(typeStr), code, 0, count)
+	var resp any
+	err := retryOnConnErr(func() error {
+		var e error
+		resp, e = client.GetIndex(klineType(typeStr), code, 0, count)
+		return e
+	})
 	if err != nil {
 		writeJSON(w, Failf("获取指数失败: %v", err))
 		return
@@ -534,13 +569,18 @@ func handleIndexAll(w http.ResponseWriter, r *http.Request) {
 	typeStr := queryStr(r, "type", "day")
 	limit := queryInt(r, "limit", 0)
 
-	resp, err := client.GetIndexAll(klineType(typeStr), code)
+	var indexResp *protocol.KlineResp
+	err := retryOnConnErr(func() error {
+		var e error
+		indexResp, e = client.GetIndexAll(klineType(typeStr), code)
+		return e
+	})
 	if err != nil {
 		writeJSON(w, Failf("获取指数失败: %v", err))
 		return
 	}
 
-	list := resp.List
+	list := indexResp.List
 	if limit > 0 && limit < len(list) {
 		list = list[len(list)-limit:]
 	}
@@ -565,9 +605,17 @@ func handleMinute(w http.ResponseWriter, r *http.Request) {
 	var resp *protocol.MinuteResp
 	var err error
 	if date != "" {
-		resp, err = client.GetHistoryMinute(date, code)
+		err = retryOnConnErr(func() error {
+			var e error
+			resp, e = client.GetHistoryMinute(date, code)
+			return e
+		})
 	} else {
-		resp, err = client.GetMinute(code)
+		err = retryOnConnErr(func() error {
+			var e error
+			resp, e = client.GetMinute(code)
+			return e
+		})
 	}
 	if err != nil {
 		writeJSON(w, Failf("获取分时数据失败: %v", err))
@@ -591,9 +639,17 @@ func handleTrade(w http.ResponseWriter, r *http.Request) {
 	var resp *protocol.TradeResp
 	var err error
 	if date != "" && date != time.Now().Format("20060102") {
-		resp, err = client.GetHistoryMinuteTradeDay(date, code)
+		err = retryOnConnErr(func() error {
+			var e error
+			resp, e = client.GetHistoryMinuteTradeDay(date, code)
+			return e
+		})
 	} else {
-		resp, err = client.GetMinuteTradeAll(code)
+		err = retryOnConnErr(func() error {
+			var e error
+			resp, e = client.GetMinuteTradeAll(code)
+			return e
+		})
 	}
 	if err != nil {
 		writeJSON(w, Failf("获取分时成交失败: %v", err))
@@ -614,7 +670,12 @@ func handleTradeHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := client.GetHistoryMinuteTradeDay(date, code)
+	var resp *protocol.TradeResp
+	err := retryOnConnErr(func() error {
+		var e error
+		resp, e = client.GetHistoryMinuteTradeDay(date, code)
+		return e
+	})
 	if err != nil {
 		writeJSON(w, Failf("获取历史分时成交失败: %v", err))
 		return
@@ -633,9 +694,17 @@ func handleMinuteTradeAll(w http.ResponseWriter, r *http.Request) {
 	var resp *protocol.TradeResp
 	var err error
 	if date != "" && date != time.Now().Format("20060102") {
-		resp, err = client.GetHistoryMinuteTradeDay(date, code)
+		err = retryOnConnErr(func() error {
+			var e error
+			resp, e = client.GetHistoryMinuteTradeDay(date, code)
+			return e
+		})
 	} else {
-		resp, err = client.GetMinuteTradeAll(code)
+		err = retryOnConnErr(func() error {
+			var e error
+			resp, e = client.GetMinuteTradeAll(code)
+			return e
+		})
 	}
 	if err != nil {
 		writeJSON(w, Failf("获取分时成交失败: %v", err))
@@ -666,9 +735,17 @@ func handleTradeHistoryFull(w http.ResponseWriter, r *http.Request) {
 	var trades protocol.Trades
 	var err error
 	if !before.IsZero() {
-		trades, err = client.GetHistoryTradeBefore(code, workday, before)
+		err = retryOnConnErr(func() error {
+			var e error
+			trades, e = client.GetHistoryTradeBefore(code, workday, before)
+			return e
+		})
 	} else {
-		trades, err = client.GetHistoryTradeFull(code, workday)
+		err = retryOnConnErr(func() error {
+			var e error
+			trades, e = client.GetHistoryTradeFull(code, workday)
+			return e
+		})
 	}
 	if err != nil {
 		writeJSON(w, Failf("获取历史分时成交失败: %v", err))
@@ -837,9 +914,22 @@ func handleSearch(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleMarketCount(w http.ResponseWriter, r *http.Request) {
-	sh, _ := client.GetCount(protocol.ExchangeSH)
-	sz, _ := client.GetCount(protocol.ExchangeSZ)
-	bj, _ := client.GetCount(protocol.ExchangeBJ)
+	var sh, sz, bj *protocol.CountResp
+	retryOnConnErr(func() error {
+		var e error
+		sh, e = client.GetCount(protocol.ExchangeSH)
+		return e
+	})
+	retryOnConnErr(func() error {
+		var e error
+		sz, e = client.GetCount(protocol.ExchangeSZ)
+		return e
+	})
+	retryOnConnErr(func() error {
+		var e error
+		bj, e = client.GetCount(protocol.ExchangeBJ)
+		return e
+	})
 
 	type exCount struct {
 		Exchange string `json:"exchange"`
@@ -869,17 +959,32 @@ func handleStockInfo(w http.ResponseWriter, r *http.Request) {
 	result := make(map[string]any)
 
 	// 五档行情
-	if quote, err := client.GetQuote(code); err == nil && len(quote) > 0 {
+	var quote protocol.QuotesResp
+	if err := retryOnConnErr(func() error {
+		var e error
+		quote, e = client.GetQuote(code)
+		return e
+	}); err == nil && len(quote) > 0 {
 		result["quote"] = quote[0]
 	}
 
 	// 日K线(最近30条)
-	if kline, err := client.GetKlineDay(code, 0, 30); err == nil {
+	var kline *protocol.KlineResp
+	if err := retryOnConnErr(func() error {
+		var e error
+		kline, e = client.GetKlineDay(code, 0, 30)
+		return e
+	}); err == nil {
 		result["kline_day"] = kline
 	}
 
 	// 分时
-	if minute, err := client.GetMinute(code); err == nil {
+	var minute *protocol.MinuteResp
+	if err := retryOnConnErr(func() error {
+		var e error
+		minute, e = client.GetMinute(code)
+		return e
+	}); err == nil {
 		result["minute"] = minute
 	}
 
@@ -923,7 +1028,12 @@ func handleFinance(w http.ResponseWriter, r *http.Request) {
 	}
 	number := code[2:]
 
-	info, err := client.GetFinanceInfo(exchange, number)
+	var info any
+	err := retryOnConnErr(func() error {
+		var e error
+		info, e = client.GetFinanceInfo(exchange, number)
+		return e
+	})
 	if err != nil {
 		writeJSON(w, Failf("获取财务信息失败: %v", err))
 		return
@@ -938,7 +1048,12 @@ func handleFinance(w http.ResponseWriter, r *http.Request) {
 func handleBlocks(w http.ResponseWriter, r *http.Request) {
 	_ = queryStr(r, "type", "concept")
 
-	data, err := client.GetTdxHy()
+	var data []*protocol.TdxHy
+	err := retryOnConnErr(func() error {
+		var e error
+		data, e = client.GetTdxHy()
+		return e
+	})
 	if err != nil {
 		writeJSON(w, Failf("获取板块数据失败: %v", err))
 		return
@@ -956,7 +1071,12 @@ func handleBlockMembers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data, err := client.GetBlockData(name)
+	var data []*protocol.Block
+	err := retryOnConnErr(func() error {
+		var e error
+		data, e = client.GetBlockData(name)
+		return e
+	})
 	if err != nil {
 		writeJSON(w, Failf("获取板块成分失败: %v", err))
 		return
@@ -977,7 +1097,12 @@ func handleCallAuction(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, Fail("股票代码不能为空"))
 		return
 	}
-	resp, err := client.GetCallAuction(code)
+	var resp any
+	err := retryOnConnErr(func() error {
+		var e error
+		resp, e = client.GetCallAuction(code)
+		return e
+	})
 	if err != nil {
 		writeJSON(w, Failf("获取集合竞价失败: %v", err))
 		return
@@ -1098,13 +1223,18 @@ func handleIncome(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	resp, err := client.GetKlineDayAll(code)
+	var klineResp *protocol.KlineResp
+	err := retryOnConnErr(func() error {
+		var e error
+		klineResp, e = client.GetKlineDayAll(code)
+		return e
+	})
 	if err != nil {
 		writeJSON(w, Failf("获取K线失败: %v", err))
 		return
 	}
 
-	incomes := extend.DoIncomes(resp.List, startAt, days...)
+	incomes := extend.DoIncomes(klineResp.List, startAt, days...)
 
 	type incomeItem struct {
 		Offset   int           `json:"offset"`

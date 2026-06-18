@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/injoyai/tdx"
 )
 
 // ========================================
@@ -87,6 +89,21 @@ func queryCodes(r *http.Request, key string) []string {
 		}
 	}
 	return result
+}
+
+// ========================================
+// 连接错误重试
+// ========================================
+
+// retryOnConnErr 执行 fn，如果返回连接相关错误，等待重连后重试一次
+func retryOnConnErr(fn func() error) error {
+	err := fn()
+	if err != nil && tdx.IsConnErr(err) {
+		// 等待 WithRedial 自动重连完成
+		time.Sleep(3 * time.Second)
+		err = fn()
+	}
+	return err
 }
 
 // ========================================

@@ -9,8 +9,8 @@ import (
 	"github.com/injoyai/logs"
 )
 
-// isConnErr 判断错误是否为网络连接相关错误
-func isConnErr(err error) bool {
+// IsConnErr 判断错误是否为网络连接相关错误
+func IsConnErr(err error) bool {
 	if err == nil {
 		return false
 	}
